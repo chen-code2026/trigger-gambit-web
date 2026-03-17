@@ -109,6 +109,39 @@ body {
 			<div id="status-notice"></div>
 		</div>
 
+		<script>
+		// Stub AudioWorklet for non-secure contexts (LAN HTTP)
+		// Game will load without audio - acceptable for LAN play
+		if (!window.isSecureContext) {
+			try {
+				var _proto = typeof AudioContext !== 'undefined' ? AudioContext.prototype : null;
+				if (!_proto && typeof webkitAudioContext !== 'undefined') {
+					_proto = webkitAudioContext.prototype;
+				}
+				if (_proto) {
+					Object.defineProperty(_proto, 'audioWorklet', {
+						get: function() {
+							return {
+								addModule: function() { return Promise.resolve(); }
+							};
+						},
+						configurable: true
+					});
+				}
+				// Also stub AudioWorkletNode constructor
+				if (typeof AudioWorkletNode === 'undefined') {
+					window.AudioWorkletNode = function(ctx, name, opts) {
+						// Minimal stub: return an object with connect/disconnect
+						this.connect = function() { return this; };
+						this.disconnect = function() {};
+						this.port = { postMessage: function() {}, onmessage: null };
+						this.parameters = new Map();
+					};
+				}
+				console.warn('[LAN Mode] AudioWorklet stubbed - game will run without audio');
+			} catch(e) { console.warn('AudioWorklet polyfill failed:', e); }
+		}
+		</script>
 		<script src="index.js"></script>
 		<script>
 const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":24473204,"index.wasm":35739700},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
@@ -164,7 +197,7 @@ const engine = new Engine(GODOT_CONFIG);
 
 	const missing = Engine.getMissingFeatures({
 		threads: GODOT_THREADS_ENABLED,
-	});
+	}).filter(f => !f.toLowerCase().includes('secure'));
 
 	if (missing.length !== 0) {
 		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
